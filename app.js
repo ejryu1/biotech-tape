@@ -7,6 +7,7 @@
     return;
   }
 
+  const st = document.createElement("style"); st.textContent = ".hide-d1 .d1{display:none}"; document.head.appendChild(st);
   const U = data.universe;
   const PORT = new Set(U.portfolio || []);
   const BNAME = { long: "Crowded Long", short: "Heavily Shorted", battle: "Battleground" };
@@ -93,7 +94,9 @@
     const { k, dir } = state.sort;
     rows.sort((a, b) => { const x = a[k], y = b[k]; if (x == null) return 1; if (y == null) return -1; return (typeof x === "number" ? x - y : String(x).localeCompare(String(y))) * dir; });
     $("count").textContent = `${rows.length} / ${all.length}`;
-    $("head").innerHTML = COLS.map(c => `<th class="${c.r ? "r" : ""}" data-k="${c.k}" ${c.nosort ? "" : 'tabindex="0"'} ${state.sort.k === c.k ? `aria-sort="${dir > 0 ? "ascending" : "descending"}"` : ""}>${c.k === "ret" ? state.period : c.label}</th>`).join("");
+    const oneD = state.period === "1D";
+    document.documentElement.classList.toggle("hide-d1", oneD);
+    $("head").innerHTML = COLS.map(c => `<th class="${c.r ? "r" : ""}${c.k === "d1" ? " d1" : ""}" data-k="${c.k}" ${c.nosort ? "" : 'tabindex="0"'} ${state.sort.k === c.k ? `aria-sort="${dir > 0 ? "ascending" : "descending"}"` : ""}>${c.k === "ret" ? state.period : c.label}</th>`).join("");
     $("head").querySelectorAll("th[tabindex]").forEach(th => {
       const go = () => { const kk = th.dataset.k; state.sort = state.sort.k === kk ? { k: kk, dir: -state.sort.dir } : { k: kk, dir: ["t", "n", "b", "stage", "area", "mod"].includes(kk) ? 1 : -1 }; render(); };
       th.onclick = go; th.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
@@ -107,7 +110,7 @@
         <td class="nm" title="${esc(r.n)}">${esc(r.n)}</td>
         <td><span class="pill ${r.b}">${BNAME[r.b]}</span></td>
         <td class="r"><div class="chgcell"><div class="bar">${bar}</div><span class="num ${cls(r.ret)}">${fmtPct(r.ret)}</span></div></td>
-        <td class="r num ${cls(r.d1)}">${fmtPct(r.d1)}</td>
+        <td class="r num d1 ${cls(r.d1)}">${fmtPct(r.d1)}</td>
         <td class="r mono${r.stale ? " muted" : ""}" ${r.stale ? 'title="최신 거래일 데이터 없음"' : ""}>${r.px != null ? r.px.toFixed(2) : "–"}</td>
         <td>${spark(r.spark)}</td>
         <td class="muted">${esc(r.stage)}</td><td>${esc(r.area)}</td><td class="muted">${esc(r.mod)}</td>
