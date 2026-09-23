@@ -57,6 +57,36 @@ def retry_missing(closes: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
     return closes
 
 
+def fill_latest(closes: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
+    """Yahoo's daily bars can lag the close by hours. Fill the most recent
+    sessions from intraday bars (last 30-minute close of each New York day)."""
+    try:
+        raw = yf.download(tickers, period="5d", interval="30m", prepost=False,
+                          group_by="column", progress=False, threads=True)
+        intr = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]].rename(columns={"Close": tickers[0]})
+    except Exception as err:  # noqa: BLE001
+        print(f"::warning::intraday fill skipped: {err}")
+        return closes
+    intr = intr.dropna(how="all")
+    if intr.empty:
+        return closes
+    idx = intr.index.tz_convert("America/New_York") if intr.index.tz is not None else intr.index
+    daily = intr.groupby(idx.date).last()
+    daily.index = pd.to_datetime(daily.index)
+    if closes.index.tz is not None:
+        closes.index = closes.index.tz_localize(None)
+    last_daily = closes.index.max()
+    for day, row in daily.iterrows():
+        if day > last_daily:
+            closes.loc[day] = row.reindex(closes.columns)
+            print(f"added {day.date()} from intraday bars ({int(row.notna().sum())} tickers)")
+        elif day in closes.index:
+            gaps = closes.loc[day].isna() & row.reindex(closes.columns).notna()
+            if gaps.any():
+                closes.loc[day, gaps[gaps].index] = row.reindex(closes.columns)[gaps]
+    return closes.sort_index()
+
+
 def build(closes: pd.DataFrame, universe: dict) -> dict:
     tickers = [u["t"] for u in universe["tickers"]]
     closes = closes.sort_index()
@@ -82,7 +112,7 @@ def build(closes: pd.DataFrame, universe: dict) -> dict:
 def main() -> int:
     universe = json.loads(UNIVERSE.read_text(encoding="utf-8"))
     tickers = [u["t"] for u in universe["tickers"]]
-    closes = retry_missing(download(tickers), tickers)
+    closes = fill_latest(retry_missing(download(tickers), tickers), tickers)
     payload = build(closes, universe)
     if len(payload["missing"]) > len(tickers) // 2:
         print(f"::error::too many tickers missing ({len(payload['missing'])}); keeping previous data")
